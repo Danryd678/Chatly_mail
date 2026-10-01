@@ -1,0 +1,149 @@
+/* Chatly Mail — mobile-first demo webmail styles. */
+
+:root {
+  --brand: #4a3b6b;
+  --brand-dark: #3a2d56;
+  --accent: #7c5cd6;
+  --bg: #f2f0f7;
+  --ink: #222;
+  --muted: #6b7280;
+  --danger: #c0392b;
+  --warn-bg: #fff8e1;
+  --warn-border: #f0c36d;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink); background: var(--bg);
+}
+
+#app { height: 100dvh; max-width: 720px; margin: 0 auto; background: #fff;
+       display: flex; flex-direction: column; box-shadow: 0 0 24px rgba(0,0,0,.08); }
+
+.view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.view[hidden] { display: none; }
+
+/* ---------- demo banner ---------- */
+
+#demo-banner {
+  background: var(--warn-bg); border-bottom: 2px solid var(--warn-border);
+  color: #5d4a1f; font-size: 12.5px; line-height: 1.45; padding: 8px 12px;
+  flex-shrink: 0;
+}
+#demo-banner em { font-style: normal; font-weight: 600; }
+
+/* ---------- auth ---------- */
+
+#view-auth { justify-content: center; align-items: center; padding: 24px; background: var(--brand); }
+
+.auth-card {
+  background: #fff; border-radius: 16px; padding: 32px 28px; width: 100%; max-width: 380px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.25); text-align: center;
+}
+
+.logo { color: var(--brand); font-size: 34px; margin: 0 0 4px; letter-spacing: .5px; }
+.logo.small { color: #fff; font-size: 20px; margin: 0; }
+.tagline { color: var(--muted); font-size: 14px; margin: 0 0 20px; line-height: 1.5; }
+.tagline strong { color: var(--brand); }
+
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tab {
+  flex: 1; padding: 10px; border: none; border-radius: 10px; background: #f0f2f5;
+  font-size: 15px; cursor: pointer; color: var(--muted);
+}
+.tab.active { background: var(--brand); color: #fff; font-weight: 600; }
+
+#form-auth { display: flex; flex-direction: column; gap: 10px; }
+#form-auth input {
+  padding: 12px 14px; border: 1px solid #d1d7db; border-radius: 10px; font-size: 16px;
+}
+#form-auth input:focus { outline: 2px solid var(--brand); border-color: transparent; }
+
+.btn-primary {
+  background: var(--brand); color: #fff; border: none; border-radius: 10px;
+  padding: 12px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%;
+}
+.btn-primary:active { background: var(--brand-dark); }
+.btn-primary[disabled] { opacity: .6; }
+
+.error { color: var(--danger); font-size: 14px; margin: 12px 0 0; }
+
+/* ---------- topbar ---------- */
+
+.topbar {
+  background: var(--brand); color: #fff; padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.topbar-actions { margin-left: auto; display: flex; gap: 4px; }
+.my-address { font-size: 12px; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.icon-btn {
+  background: none; border: none; color: #fff; font-size: 22px; cursor: pointer;
+  width: 40px; height: 40px; border-radius: 50%; line-height: 1;
+}
+.icon-btn:active { background: rgba(255,255,255,.15); }
+
+/* ---------- folders ---------- */
+
+.folders { display: flex; background: #fff; border-bottom: 1px solid #e2e6e9; flex-shrink: 0; }
+.folder {
+  flex: 1; padding: 12px 4px; border: none; background: none; font-size: 15px;
+  color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.folder.active { color: var(--brand); font-weight: 700; border-bottom-color: var(--brand); }
+.badge {
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
+  min-width: 22px; height: 22px; border-radius: 11px; display: inline-flex;
+  align-items: center; justify-content: center; padding: 0 6px;
+}
+.badge[hidden] { display: none; }
+
+/* ---------- mail list ---------- */
+
+.mail-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.mail-item {
+  padding: 12px 14px; border-bottom: 1px solid #eef0f2; cursor: pointer;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.mail-item:active { background: #f5f3fa; }
+.mail-item.unread { background: #f6f1ff; }
+.mail-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.mail-from { font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-item.unread .mail-from::before { content: "● "; color: var(--accent); font-size: 11px; }
+.mail-date { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.mail-subject { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-item.unread .mail-subject { font-weight: 600; }
+.mail-preview { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-draft-tag {
+  font-size: 11px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 4px; padding: 1px 6px; margin-right: 6px;
+}
+
+.empty { text-align: center; color: var(--muted); padding: 48px 24px; font-size: 15px; line-height: 1.6; }
+.empty[hidden] { display: none; }
+
+/* ---------- reader ---------- */
+
+.read-card { padding: 18px 16px; overflow-y: auto; flex: 1; }
+.read-card h2 { margin: 0 0 12px; font-size: 20px; }
+.read-meta { font-size: 13.5px; color: var(--muted); margin-bottom: 16px;
+             display: flex; flex-direction: column; gap: 4px;
+             border-bottom: 1px solid #eef0f2; padding-bottom: 12px; }
+.meta-label { font-weight: 700; color: var(--ink); }
+.read-body { font-size: 15.5px; line-height: 1.65; white-space: pre-wrap; word-wrap: break-word; margin: 0; }
+
+/* ---------- compose ---------- */
+
+.compose-form { display: flex; flex-direction: column; gap: 12px; padding: 14px; flex: 1; min-height: 0; }
+.compose-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.compose-form label.grow { flex: 1; min-height: 0; }
+.compose-form input, .compose-form textarea {
+  padding: 12px 14px; border: 1px solid #d1d7db; border-radius: 10px; font-size: 16px;
+  font-weight: 400; color: var(--ink); font-family: inherit;
+}
+.compose-form input:focus, .compose-form textarea:focus { outline: 2px solid var(--brand); border-color: transparent; }
+.compose-form textarea { flex: 1; min-height: 160px; resize: none; }

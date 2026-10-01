@@ -1,0 +1,1 @@
+{"dependencies":{"express":"4.21.2"},"description":"Chatly Mail — a free demo webmail app. Addresses like you@mail.chatly.app work only inside this app (no domain owned yet). Node.js + Express + SQLite, no build step.","license":"MIT","main":"server.js","name":"chatly-mail","scripts":{"start":"node server.js"},"type":"module","version":"1.0.0"}

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#4a3b6b" />
+  <title>Chatly Mail</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Demo banner: always visible -->
+    <div id="demo-banner">
+      <strong>Demo.</strong>
+      Addresses like <em>you@mail.chatly.app</em> only work inside this app.
+      No domain is owned yet, so mail can't reach real inboxes (Gmail, etc.).
+    </div>
+
+    <!-- Auth view -->
+    <section id="view-auth" class="view">
+      <div class="auth-card">
+        <h1 class="logo">✉️ Chatly Mail</h1>
+        <p class="tagline">Free demo webmail. Pick a username — your address becomes
+          <strong><span id="addr-preview">you</span>@mail.chatly.app</strong>.</p>
+        <div class="tabs">
+          <button id="tab-login" class="tab active">Log in</button>
+          <button id="tab-register" class="tab">Sign up</button>
+        </div>
+        <form id="form-auth" autocomplete="on">
+          <input id="input-username" type="text" placeholder="Username (3–20 letters, numbers, _)"
+                 autocomplete="username" minlength="3" maxlength="20" required />
+          <input id="input-password" type="password" placeholder="Password (min 6 characters)"
+                 autocomplete="current-password" minlength="6" required />
+          <button type="submit" id="btn-auth" class="btn-primary">Log in</button>
+        </form>
+        <p id="auth-error" class="error" hidden></p>
+      </div>
+    </section>
+
+    <!-- Mailbox view -->
+    <section id="view-mail" class="view" hidden>
+      <header class="topbar">
+        <span class="logo small">✉️ Chatly Mail</span>
+        <span id="my-address" class="my-address"></span>
+        <div class="topbar-actions">
+          <button id="btn-compose" class="icon-btn" title="Compose" aria-label="Compose">✎</button>
+          <button id="btn-logout" class="icon-btn" title="Log out" aria-label="Log out">⎋</button>
+        </div>
+      </header>
+      <nav class="folders">
+        <button class="folder active" data-folder="inbox">Inbox <span id="badge-inbox" class="badge" hidden></span></button>
+        <button class="folder" data-folder="sent">Sent</button>
+        <button class="folder" data-folder="drafts">Drafts</button>
+      </nav>
+      <ul id="mail-list" class="mail-list"></ul>
+      <p id="mail-empty" class="empty" hidden></p>
+    </section>
+
+    <!-- Reader view -->
+    <section id="view-read" class="view" hidden>
+      <header class="topbar">
+        <button id="btn-back-read" class="icon-btn" aria-label="Back">←</button>
+        <span class="logo small">Message</span>
+        <div class="topbar-actions">
+          <button id="btn-reply" class="icon-btn" title="Reply" aria-label="Reply">↩</button>
+          <button id="btn-delete-read" class="icon-btn" title="Delete" aria-label="Delete">🗑</button>
+        </div>
+      </header>
+      <article id="read-card" class="read-card">
+        <h2 id="read-subject"></h2>
+        <div class="read-meta">
+          <div><span class="meta-label">From:</span> <span id="read-from"></span></div>
+          <div><span class="meta-label">To:</span> <span id="read-to"></span></div>
+          <div><span class="meta-label">Date:</span> <span id="read-date"></span></div>
+        </div>
+        <p id="read-body" class="read-body"></p>
+      </article>
+    </section>
+
+    <!-- Compose view -->
+    <section id="view-compose" class="view" hidden>
+      <header class="topbar">
+        <button id="btn-back-compose" class="icon-btn" aria-label="Back">←</button>
+        <span class="logo small" id="compose-title">New message</span>
+        <div class="topbar-actions">
+          <button id="btn-save-draft" class="icon-btn" title="Save draft" aria-label="Save draft">💾</button>
+        </div>
+      </header>
+      <form id="form-compose" class="compose-form">
+        <label>To
+          <input id="compose-to" type="text" placeholder="username  (→ username@mail.chatly.app)"
+                 autocomplete="off" list="addr-suggestions" />
+          <datalist id="addr-suggestions"></datalist>
+        </label>
+        <label>Subject
+          <input id="compose-subject" type="text" placeholder="Subject" maxlength="200" />
+        </label>
+        <label class="grow">Message
+          <textarea id="compose-body" placeholder="Write your message…" rows="10" maxlength="50000"></textarea>
+        </label>
+        <p id="compose-error" class="error" hidden></p>
+        <button type="submit" class="btn-primary">Send</button>
+      </form>
+    </section>
+
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
