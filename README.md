@@ -1,11 +1,24 @@
-# Chatly Mail — free demo webmail
+# Chatly Mail — webmail with real outbound sending
 
 A simple webmail app. Sign up with a username and password; your address becomes
 `username@mail.chatly.app`. Write to other app users, keep drafts, reply, delete.
 
-> **Demo.** Addresses like `you@mail.chatly.app` exist only inside this app.
-> No domain is owned yet, so mail can never be sent to, or received from, real
-> external inboxes (Gmail, etc.). This banner is shown in the app UI too.
+> **Real sending.** Writing to a real address (e.g. `someone@gmail.com`) actually
+> delivers it over the internet via SMTP, from the configured Gmail account.
+> Replies land in that Gmail inbox — not in this app. Receiving from real
+> inboxes still needs an owned domain (MX records), so inbound stays in-app only.
+
+## Making real sending work
+
+1. The server needs these env vars (same convention as the Chatly app):
+   `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`,
+   `SMTP_FROM` (optional, defaults to `SMTP_USER`).
+   With a Gmail account: host `smtp.gmail.com`, port `587`, user = your Gmail
+   address, pass = a Gmail **app password** (created on that same account).
+2. Set them on the hosting dashboard (Faable → the chatly-mail service →
+   Variables/Environment), then redeploy/restart.
+3. `/api/health` reports `real_send: true` when active; the app banner updates
+   itself.
 
 ## Run it
 

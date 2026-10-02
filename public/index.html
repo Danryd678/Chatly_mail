@@ -10,12 +10,8 @@
 <body>
   <div id="app">
 
-    <!-- Demo banner: always visible -->
-    <div id="demo-banner">
-      <strong>Demo.</strong>
-      Addresses like <em>you@mail.chatly.app</em> only work inside this app.
-      No domain is owned yet, so mail can't reach real inboxes (Gmail, etc.).
-    </div>
+    <!-- Banner: always visible, text set by app.js from /api/health -->
+    <div id="demo-banner">Loading…</div>
 
     <!-- Auth view -->
     <section id="view-auth" class="view">
@@ -89,7 +85,7 @@
       </header>
       <form id="form-compose" class="compose-form">
         <label>To
-          <input id="compose-to" type="text" placeholder="username  (→ username@mail.chatly.app)"
+          <input id="compose-to" type="text" placeholder="username or any email address"
                  autocomplete="off" list="addr-suggestions" />
           <datalist id="addr-suggestions"></datalist>
         </label>

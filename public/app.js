@@ -95,12 +95,30 @@ $('btn-logout').onclick = async () => {
 };
 
 async function boot() {
+  updateBanner();
   try {
     const data = await api('/api/me');
     me = { username: data.username, address: data.address };
     enterMailbox();
   } catch {
     show('view-auth');
+  }
+}
+
+async function updateBanner() {
+  const el = $('demo-banner');
+  try {
+    const h = await api('/api/health');
+    if (h.real_send) {
+      el.innerHTML = '<strong>Real sending is ON.</strong> You can email real inboxes (Gmail, etc.) — ' +
+        'it goes out from <em>' + esc(h.send_from) + '</em>, and replies land in that inbox, not here. ' +
+        'Mail between app users stays in-app.';
+    } else {
+      el.innerHTML = '<strong>Demo.</strong> Addresses like <em>you@' + esc(h.domain) + '</em> only work ' +
+        'inside this app. Real sending is off until the server gets its email settings.';
+    }
+  } catch {
+    el.innerHTML = '<strong>Chatly Mail.</strong>';
   }
 }
 

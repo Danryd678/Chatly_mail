@@ -1,16 +1,27 @@
 /**
- * Chatly Mail v1.0 — free demo webmail.
+ * Chatly Mail v1.1 — webmail with real outbound sending.
  *
- * Stack: Node.js + Express + SQLite (node:sqlite, built in).
- * No native modules, no build step. SQLite file keeps everything persistent.
+ * Stack: Node.js + Express + SQLite (node:sqlite, built in) + nodemailer.
+ * No build step. SQLite file keeps everything persistent.
  *
- * DEMO LIMITATION (shown in the UI too): addresses like you@mail.chatly.app
- * exist only inside this app. No domain is owned yet, so mail can never be
- * sent to, or received from, real external inboxes (Gmail, etc.).
+ * How mail works now:
+ *  - Addresses like you@mail.chatly.app exist inside this app only (no domain
+ *    is owned yet). Mail between app users is delivered in-app, instantly.
+ *  - NEW: writing to a REAL address (e.g. someone@gmail.com) actually sends
+ *    it over the internet via SMTP. It goes out from the configured Gmail
+ *    account (SMTP_FROM), and any reply lands in that Gmail inbox — not here.
+ *  - Receiving from real inboxes is still impossible without owning a domain
+ *    (needs MX records). That part stays in-app only until a domain is owned.
  *
  * Config (env vars):
- *   PORT     — port to listen on (default 3000)
- *   DB_PATH  — SQLite file path (default ./data/mail.db)
+ *   PORT        — port to listen on (default 3000)
+ *   DB_PATH     — SQLite file path (default ./data/mail.db)
+ *   MAIL_DOMAIN — in-app mail domain (default mail.chatly.app)
+ *   SMTP_HOST   — SMTP server hostname (required for real sending)
+ *   SMTP_PORT   — SMTP port (default 587)
+ *   SMTP_USER   — SMTP username (required for real sending)
+ *   SMTP_PASS   — SMTP password / app password (required for real sending)
+ *   SMTP_FROM   — From: address shown on real mail (default: SMTP_USER)
  *
  * Auth: HttpOnly session cookie. Session token also accepted via
  *   - JSON body field  {token: "..."}
@@ -22,6 +33,7 @@
  * `error` field, never the status code.
  */
 import express from 'express';
+import nodemailer from 'nodemailer';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -33,10 +45,35 @@ const PORT = Number(process.env.PORT || 3000);
 const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), 'data', 'mail.db');
 const SESSION_COOKIE = 'chatlymail_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const MAIL_DOMAIN = 'mail.chatly.app';
+const MAIL_DOMAIN = (process.env.MAIL_DOMAIN || 'mail.chatly.app').toLowerCase();
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAX_SUBJECT_LEN = 200;
 const MAX_BODY_LEN = 50000;
+const MAX_ADDR_LEN = 254;
+
+const SMTP = {
+  host: process.env.SMTP_HOST || '',
+  port: Number(process.env.SMTP_PORT || 587),
+  user: process.env.SMTP_USER || '',
+  pass: process.env.SMTP_PASS || '',
+  from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+};
+const smtpConfigured = () => Boolean(SMTP.host && SMTP.user && SMTP.pass);
+
+let mailer = null;
+function getMailer() {
+  if (!smtpConfigured()) return null;
+  if (!mailer) {
+    mailer = nodemailer.createTransport({
+      host: SMTP.host,
+      port: SMTP.port,
+      secure: SMTP.port === 465, // implicit TLS on 465, STARTTLS otherwise
+      auth: { user: SMTP.user, pass: SMTP.pass },
+    });
+  }
+  return mailer;
+}
 
 const addressOf = (username) => `${username}@${MAIL_DOMAIN}`;
 
@@ -77,6 +114,12 @@ db.exec(`
     ON emails(sender_id, is_draft, deleted_by_sender, updated_at);
   CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 `);
+// v1.1 migration: external recipient address on sent mail
+try {
+  db.exec('ALTER TABLE emails ADD COLUMN to_external TEXT');
+} catch {
+  /* column already exists */
+}
 
 // ---------------------------------------------------------------- auth helpers
 
@@ -154,19 +197,23 @@ function clearSessionCookie(res) {
   res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
 }
 
-// Resolve a "to" value (username or full address) to a user row.
+// Resolve a "to" value. Returns { user } for in-app, { external } for a real
+// address, or { error, message } when it can't be used.
 function resolveRecipient(to) {
-  const raw = String(to || '').trim();
+  const raw = String(to || '').trim().slice(0, MAX_ADDR_LEN);
   if (!raw) return { error: 'missing_recipient', message: 'Enter a recipient.' };
   let username = raw;
   const at = raw.lastIndexOf('@');
   if (at > 0) {
     const domain = raw.slice(at + 1).toLowerCase();
     if (domain !== MAIL_DOMAIN) {
-      return {
-        error: 'external_address',
-        message: `Demo limitation: "${raw}" is outside this app. You can only write to addresses ending in @${MAIL_DOMAIN}.`,
-      };
+      if (!EMAIL_RE.test(raw)) {
+        return {
+          error: 'bad_recipient',
+          message: `"${raw}" is not a valid email address.`,
+        };
+      }
+      return { external: raw };
     }
     username = raw.slice(0, at);
   }
@@ -180,17 +227,45 @@ function resolveRecipient(to) {
   return { user: { id: row.id, username: row.username, address: addressOf(row.username) } };
 }
 
+// Actually send a message to a real inbox over SMTP.
+async function sendExternal({ to, subject, body, fromName }) {
+  const transport = getMailer();
+  if (!transport) {
+    return {
+      error: 'smtp_not_configured',
+      message: 'Real sending is not set up yet (SMTP_* settings missing on the server). In-app mail still works.',
+    };
+  }
+  try {
+    await transport.sendMail({
+      from: fromName ? `"${fromName} via Chatly Mail" <${SMTP.from || SMTP.user}>` : (SMTP.from || SMTP.user),
+      to,
+      subject: subject || '(no subject)',
+      text: body || '',
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('SMTP send failed:', err && err.message);
+    return {
+      error: 'send_failed',
+      message: 'Could not send that email right now. It was not delivered — try again later.',
+    };
+  }
+}
+
 function emailJson(row, me) {
   const sender = db.prepare('SELECT username FROM users WHERE id = ?').get(row.sender_id);
   const recipient = row.recipient_id
     ? db.prepare('SELECT username FROM users WHERE id = ?').get(row.recipient_id)
     : null;
+  const external = row.to_external || null;
   return {
     id: row.id,
     from: addressOf(sender.username),
     from_username: sender.username,
-    to: recipient ? addressOf(recipient.username) : null,
+    to: external || (recipient ? addressOf(recipient.username) : null),
     to_username: recipient ? recipient.username : null,
+    external: Boolean(external),
     subject: row.subject,
     body: row.body,
     is_read: Boolean(row.is_read),
@@ -252,7 +327,13 @@ app.post('/api/logout', requireAuth, (req, res) => {
 });
 
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ username: req.user.username, address: req.user.address, domain: MAIL_DOMAIN });
+  res.json({
+    username: req.user.username,
+    address: req.user.address,
+    domain: MAIL_DOMAIN,
+    real_send: smtpConfigured(),
+    send_from: smtpConfigured() ? (SMTP.from || SMTP.user) : null,
+  });
 });
 
 // ---- user lookup (for addressing mail) ----
@@ -316,7 +397,7 @@ app.get('/api/emails/:id', requireAuth, (req, res) => {
 
 // ---- compose / send ----
 
-app.post('/api/emails', requireAuth, (req, res) => {
+app.post('/api/emails', requireAuth, async (req, res) => {
   const draft = req.body?.draft === true;
   const subject = String(req.body?.subject || '').slice(0, MAX_SUBJECT_LEN);
   const body = String(req.body?.body || '').slice(0, MAX_BODY_LEN);
@@ -327,51 +408,86 @@ app.post('/api/emails', requireAuth, (req, res) => {
   }
 
   let recipientId = null;
+  let toExternal = null;
   if (toRaw) {
     const resolved = resolveRecipient(toRaw);
     if (resolved.error) return res.status(422).json(resolved);
-    if (resolved.user.id === req.user.id) {
-      return res.status(400).json({ error: 'self_mail', message: 'You cannot send mail to yourself.' });
+    if (resolved.external) {
+      toExternal = resolved.external;
+    } else {
+      if (resolved.user.id === req.user.id) {
+        return res.status(400).json({ error: 'self_mail', message: 'You cannot send mail to yourself.' });
+      }
+      recipientId = resolved.user.id;
     }
-    recipientId = resolved.user.id;
   } else if (!draft) {
     return res.status(400).json({ error: 'missing_recipient', message: 'Enter a recipient.' });
+  }
+
+  // Real send: deliver over SMTP first, then keep a copy in Sent.
+  if (!draft && toExternal) {
+    const sent = await sendExternal({
+      to: toExternal,
+      subject,
+      body,
+      fromName: req.user.username,
+    });
+    if (sent.error) return res.status(422).json(sent);
   }
 
   const now = Date.now();
   const info = db
     .prepare(
-      'INSERT INTO emails (sender_id, recipient_id, subject, body, is_read, is_draft, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)'
+      'INSERT INTO emails (sender_id, recipient_id, subject, body, is_read, is_draft, to_external, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)'
     )
-    .run(req.user.id, recipientId, subject, body, draft ? 1 : 0, now, now);
+    .run(req.user.id, recipientId, subject, body, draft ? 1 : 0, toExternal, now, now);
   const row = db.prepare('SELECT * FROM emails WHERE id = ?').get(info.lastInsertRowid);
   res.json({ email: emailJson(row, req.user) });
 });
 
 // Send a saved draft
-app.post('/api/emails/:id/send', requireAuth, (req, res) => {
+app.post('/api/emails/:id/send', requireAuth, async (req, res) => {
   const row = db.prepare('SELECT * FROM emails WHERE id = ?').get(req.params.id);
   if (!row || row.sender_id !== req.user.id || !row.is_draft || row.deleted_by_sender) {
     return res.status(404).json({ error: 'not_found', message: 'Draft not found.' });
   }
   const toRaw = String(req.body?.to || '').trim();
   let recipientId = row.recipient_id;
+  let toExternal = row.to_external;
   if (toRaw) {
     const resolved = resolveRecipient(toRaw);
     if (resolved.error) return res.status(422).json(resolved);
-    if (resolved.user.id === req.user.id) {
-      return res.status(400).json({ error: 'self_mail', message: 'You cannot send mail to yourself.' });
+    if (resolved.external) {
+      recipientId = null;
+      toExternal = resolved.external;
+    } else {
+      if (resolved.user.id === req.user.id) {
+        return res.status(400).json({ error: 'self_mail', message: 'You cannot send mail to yourself.' });
+      }
+      recipientId = resolved.user.id;
+      toExternal = null;
     }
-    recipientId = resolved.user.id;
   }
-  if (!recipientId) {
+  if (!recipientId && !toExternal) {
     return res.status(400).json({ error: 'missing_recipient', message: 'Add a recipient before sending.' });
   }
   if (recipientId === req.user.id) {
     return res.status(400).json({ error: 'self_mail', message: 'You cannot send mail to yourself.' });
   }
-  db.prepare('UPDATE emails SET is_draft = 0, recipient_id = ?, updated_at = ? WHERE id = ?').run(
+
+  if (toExternal) {
+    const sent = await sendExternal({
+      to: toExternal,
+      subject: row.subject,
+      body: row.body,
+      fromName: req.user.username,
+    });
+    if (sent.error) return res.status(422).json(sent);
+  }
+
+  db.prepare('UPDATE emails SET is_draft = 0, recipient_id = ?, to_external = ?, updated_at = ? WHERE id = ?').run(
     recipientId,
+    toExternal,
     Date.now(),
     row.id
   );
@@ -389,22 +505,26 @@ app.put('/api/emails/:id', requireAuth, (req, res) => {
   const body = String(req.body?.body ?? row.body).slice(0, MAX_BODY_LEN);
   const toRaw = req.body?.to !== undefined ? String(req.body.to).trim() : null;
   let recipientId = row.recipient_id;
+  let toExternal = row.to_external;
   if (toRaw !== null) {
     if (!toRaw) {
       recipientId = null;
+      toExternal = null;
     } else {
       const resolved = resolveRecipient(toRaw);
       if (resolved.error) return res.status(422).json(resolved);
-      recipientId = resolved.user.id;
+      if (resolved.external) {
+        recipientId = null;
+        toExternal = resolved.external;
+      } else {
+        recipientId = resolved.user.id;
+        toExternal = null;
+      }
     }
   }
-  db.prepare('UPDATE emails SET subject = ?, body = ?, recipient_id = ?, updated_at = ? WHERE id = ?').run(
-    subject,
-    body,
-    recipientId,
-    Date.now(),
-    row.id
-  );
+  db.prepare(
+    'UPDATE emails SET subject = ?, body = ?, recipient_id = ?, to_external = ?, updated_at = ? WHERE id = ?'
+  ).run(subject, body, recipientId, toExternal, Date.now(), row.id);
   const updated = db.prepare('SELECT * FROM emails WHERE id = ?').get(row.id);
   res.json({ email: emailJson(updated, req.user) });
 });
@@ -428,7 +548,19 @@ app.delete('/api/emails/:id', requireAuth, (req, res) => {
 // ---- health ----
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, app: 'chatly-mail', version: '1.0.0', demo: true, domain: MAIL_DOMAIN });
+  res.json({
+    ok: true,
+    app: 'chatly-mail',
+    version: '1.1.0',
+    demo: true,
+    domain: MAIL_DOMAIN,
+    real_send: smtpConfigured(),
+    send_from: smtpConfigured() ? (SMTP.from || SMTP.user) : null,
+  });
 });
 
-app.listen(PORT, () => console.log(`Chatly Mail listening on port ${PORT}`));
+app.listen(PORT, () =>
+  console.log(
+    `Chatly Mail v1.1 listening on port ${PORT} (real send: ${smtpConfigured() ? 'ON via ' + (SMTP.from || SMTP.user) : 'OFF — set SMTP_* env vars'})`
+  )
+);
